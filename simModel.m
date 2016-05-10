@@ -3,23 +3,24 @@
 close all
 clc
 clear all
-format long eng
+format short eng
 
-TEST_VECTOR_SIZE = 32; % rozmiar wektora danych testowych
-BLOCK_SIZE = 4; % rozmiar bloków danych do skalowania
-Qs = 8; % szerokoœæ bitowa danych wejœciowych
-Qq = 5; % szerokoœæ bitowa danych przeskalowanych
+TEST_DATA_SIZE = 1024; % rozmiar wektora danych testowych
+BLOCK_SIZE = 16; % rozmiar bloków danych do skalowania
+Qs = 16; % szerokoœæ bitowa wspó³czynika skalowania
+Qq = 12; % szerokoœæ bitowa kwantyzacji
 %% inicjalizacja wektora danych
-testVector = rand(1,TEST_VECTOR_SIZE).*(2^Qs-1); % wektor losowych danych o wartoœci nie wiêkszej ni¿ najwiêksza próbka IQ
+testData = randi([-(2^(Qs-1)) (2^(Qs-1))],1,TEST_DATA_SIZE);
+%testData = (rand(1,TEST_DATA_SIZE)-0.5).*(2^Qs-1); % wektor losowych danych o wartoœci nie wiêkszej ni¿ najwiêksza próbka IQ
+%testData = linspace(1,(2^Qs-1),TEST_DATA_SIZE); % wektor wartoœci stale rosnacych
 numOfReadSamples = 1;
-readBlock = zeros(TEST_VECTOR_SIZE/BLOCK_SIZE,BLOCK_SIZE);
+readBlock = zeros(TEST_DATA_SIZE/BLOCK_SIZE,BLOCK_SIZE);
 %% podzia³ na bloki
-disp('-------')
 disp('dzielenie na bloki')
 disp('-------')
-for i = 1:(TEST_VECTOR_SIZE/BLOCK_SIZE)
+for i = 1:(TEST_DATA_SIZE/BLOCK_SIZE)
     while numOfReadSamples <= BLOCK_SIZE
-        readBlock(i,numOfReadSamples) = testVector((i-1)*BLOCK_SIZE + numOfReadSamples);
+        readBlock(i,numOfReadSamples) = testData((i-1)*BLOCK_SIZE + numOfReadSamples);
         numOfReadSamples = numOfReadSamples + 1;
     end
     disp(readBlock(i,:));
@@ -29,47 +30,49 @@ end
 disp('-------')
 disp('skalowanie')
 disp('-------')
-scaledVector = zeros(TEST_VECTOR_SIZE/BLOCK_SIZE,BLOCK_SIZE);
+scaledBlockData = zeros(TEST_DATA_SIZE/BLOCK_SIZE,BLOCK_SIZE);
 maxSample = 0;
-scalingFactor = 1;
-for i = 1:(TEST_VECTOR_SIZE/BLOCK_SIZE)
+scalingFactor = ones(TEST_DATA_SIZE/BLOCK_SIZE,BLOCK_SIZE);
+for i = 1:(TEST_DATA_SIZE/BLOCK_SIZE)
+    % maxSample - A(k), próbka o najwiêkszej wartoœci bezwzglêdnej w bloku
     maxSample = max(abs(readBlock(i,:)));
+    % scalingFactor - S(k), scaling factor ograniczony przez szerokoœæ bitow¹ podczas wysy³ania
     %scalar = ((2^Qs)-1)/maxSample;
     %scalar = ((2^Qs)-1)/max(abs(readBlock(i,:)));
     if ceil(maxSample) > ((2^Qs)-1)
-        scalingFactor = ((2^Qs)-1);
+        scalingFactor(i) = ((2^Qs)-1);
     else
-        scalingFactor = ceil(maxSample);
+        scalingFactor(i) = ceil(maxSample);
     end
     fprintf('Blok %d, Wspólczynnik skalowania: %d\nPrzeskalowane dane:\n',i,scalingFactor);
-    scaledVector(i,1:BLOCK_SIZE) = (testVector(1+(i-1)*BLOCK_SIZE:(i*BLOCK_SIZE)).*((2^Qq)-1))./scalingFactor;
-    disp(scaledVector(i,:));
+    scaledBlockData(i,1:BLOCK_SIZE) = (testData(1+(i-1)*BLOCK_SIZE:(i*BLOCK_SIZE)).*((2^Qq)-1))./scalingFactor(i);
+    disp(scaledBlockData(i,:));
 end
 %% kwantyzacja
-
+%quant = QUANTIZER('Roundmode',round,'Overflowmode',saturate,'Format',[wordlength exponentlength]);
+quantizedBlockData = zeros(TEST_DATA_SIZE/BLOCK_SIZE,BLOCK_SIZE);
+for i = 1:(TEST_DATA_SIZE/BLOCK_SIZE)
+    quantizedBlockData(i) = quantiz(scaledBlockData(i),linspace(-(2^(Qq-1)),(2^(Qq-1)),2^Qq));
+end
 %% odtwarzanie danych
 disp('-------')
 disp('odtwarzanie')
 disp('-------')
-reScaledVector = zeros(TEST_VECTOR_SIZE/BLOCK_SIZE,BLOCK_SIZE);
-for i = 1:(TEST_VECTOR_SIZE/BLOCK_SIZE)
-    maxSample = max(abs(readBlock(i,:)));
-    if ceil(maxSample) > ((2^Qs)-1)
-        scalingFactor = ((2^Qs)-1);
-    else
-        scalingFactor = ceil(maxSample);
-    end
+rescaledBlockData = zeros(TEST_DATA_SIZE/BLOCK_SIZE,BLOCK_SIZE);
+for i = 1:(TEST_DATA_SIZE/BLOCK_SIZE)
     %scalar = ((2^Qs)-1)/max(abs(readBlock(i,:)));
-    fprintf('Blok %d, Wspólczynnik skalowania: %d\nOdtworzone dane:\n',i,scalingFactor);
-    reScaledVector(i,1:BLOCK_SIZE) = (scaledVector(i,:).*scalingFactor)./((2^Qq)-1);
-    disp(reScaledVector(i,:));
+    fprintf('Blok %d, Wspólczynnik skalowania: %d\nOdtworzone dane:\n',i,scalingFactor(i));
+    rescaledBlockData(i,1:BLOCK_SIZE) = (quantizedBlockData(i,:).*scalingFactor(i))./((2^Qq)-1);
+    disp(rescaledBlockData(i,:));
 end
 %% porównanie danych Ÿród³owych i odtworzonych
 disp('-------')
 disp('EVM')
 disp('-------')
-EVM = (((readBlock-reScaledVector).^2)./(readBlock.^2))*100;
+EVM = (((readBlock-rescaledBlockData).^2)./(readBlock.^2))*100;
 disp(EVM)
+disp('Mean EVM')
+disp(mean(mean(EVM)))
 disp('-------')
 disp('koniec')
 disp('-------')
