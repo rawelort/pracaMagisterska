@@ -8,9 +8,9 @@ format short% eng
 TEST_DATA_SIZE = 32; % rozmiar wektora danych testowych
 BLOCK_SIZE = 4; % rozmiar bloków danych do skalowania
 Qs = 16; % szerokoœæ bitowa wspó³czynika skalowania
-Qq = 12; % szerokoœæ bitowa kwantyzacji
-%% inicjalizacja wektora danych
-testData = randi([-(2^(Qs-1)) (2^(Qs-1))],1,TEST_DATA_SIZE);
+Qq = 16; % szerokoœæ bitowa kwantyzacji
+%% inicjalizacja wektora danych testowych
+testData = randi([-(2^(Qs-1)) (2^(Qs-1))],1,TEST_DATA_SIZE); % wektor losowych integerów nie wiekszych ni¿ 2^16
 %testData = (rand(1,TEST_DATA_SIZE)-0.5).*(2^Qs-1); % wektor losowych danych o wartoœci nie wiêkszej ni¿ najwiêksza próbka IQ
 %testData = linspace(1,(2^Qs-1),TEST_DATA_SIZE); % wektor wartoœci stale rosnacych
 numOfReadSamples = 1;
@@ -46,7 +46,8 @@ for i = 1:(TEST_DATA_SIZE/BLOCK_SIZE)
         scalingFactor(i) = ceil(maxSample);
     end
     fprintf('Blok %d, Wspólczynnik skalowania: %d\nPrzeskalowane dane:\n',i,scalingFactor(i));
-    scaledBlockData(i,1:BLOCK_SIZE) = (testData(1+(i-1)*BLOCK_SIZE:(i*BLOCK_SIZE)).*((2^Qq)-1))./scalingFactor(i);
+    %scaledBlockData(i,1:BLOCK_SIZE) = (testData(1+(i-1)*BLOCK_SIZE:(i*BLOCK_SIZE)).*((2^Qq)-1))./scalingFactor(i);
+    scaledBlockData(i,:) = readBlock(i,:).*(2^(Qq-1)-1)./scalingFactor(i);
     %disp(scaledBlockData(i,:));
 end
 %% kwantyzacja
@@ -73,10 +74,13 @@ end
 disp('-------')
 disp('EVM')
 disp('-------')
-EVM = sqrt( sum((readBlock-rescaledBlockData).^2)./sum(readBlock.^2) )*100;
+EVM = ones(1,TEST_DATA_SIZE/BLOCK_SIZE);
+for i = 1:(TEST_DATA_SIZE/BLOCK_SIZE)
+    EVM(i) = sqrt( sum( (readBlock(i,:)-rescaledBlockData(i,:)).^2 )/sum( readBlock(i,:).^2 ) )*100;
+end
 disp(EVM)
 disp('Mean EVM')
-disp(mean(mean(EVM)))
+disp(mean(EVM))
 % disp('-------')
 % disp('koniec')
 % disp('-------')
