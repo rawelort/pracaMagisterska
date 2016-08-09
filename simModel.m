@@ -6,7 +6,7 @@ clear all
 format long g % eng
 %_ parametry sta³e
 TEST_DATA_BITWIDTH = 16; % szerokoœæ bitowa próbek testowych (sign int)
-TEST_VECTOR_LENGTH = 1024; % iloœæ próbek w wektorze danych testowych
+TEST_VECTOR_LENGTH = 8192; % iloœæ próbek w wektorze danych testowych
 %_ parametry testowane 
 blockSize = 1024; % rozmiar bloków danych do skalowania
 Qs = 16; % szerokoœæ bitowa wspó³czynika skalowania
@@ -37,6 +37,30 @@ testVector = int16(scaledRandomData);
 %testVector = (rand(1,TEST_VECTOR_LENGTH)-0.5).*(2^TEST_DATA_BITWIDTH-1); %wektor losowych danych o wartoœci
             % nie wiêkszej ni¿ 2^TEST_DATA_BITWIDTH
 %testVector = linspace(1,(2^TEST_DATA_BITWIDTH-1),TEST_VECTOR_LENGTH); % wektor wartoœci stale rosnacych
+
+%% Pêtle automatyzuj¹ce symulacjê
+minQs = 4;
+maxQs = TEST_DATA_BITWIDTH;
+minQq = 4;
+maxQq = TEST_DATA_BITWIDTH;
+minBlockSize = 1;
+maxBlockSize = TEST_VECTOR_LENGTH;
+outFile = fopen('simResults.ods','w');
+fprintf(outFile,'Block size, Scaling factor bitwidth, Quantisation bitwidth, Mean EVM, Compression rate\n');
+for blockSize = minBlockSize:maxBlockSize
+    if mod(TEST_VECTOR_LENGTH,blockSize) == 0
+        for Qs = minQs:maxQs
+           for Qq = minQq:maxQq
+              if (Qq > Qs)
+                  continue
+              else
+                  %_ Zmienne pomocnocze zale¿ne od testowanych parametrów
+                  fprintf('*')
+                  NUM_OF_BLOCKS = TEST_VECTOR_LENGTH/blockSize;
+                  %_ Obliczenie wspó³czynnika kompresji
+                  IN_DATA_SIZE = TEST_VECTOR_LENGTH*TEST_DATA_BITWIDTH;
+                  OUT_DATA_SIZE = NUM_OF_BLOCKS*Qs + TEST_VECTOR_LENGTH*Qq;
+                  DATA_COMPRESSION_RATE = IN_DATA_SIZE/OUT_DATA_SIZE;
 
 %% podzia³ na bloki
 % disp('-------')
@@ -80,15 +104,15 @@ for currentBlock = 1:(NUM_OF_BLOCKS)
     else
         scalingFactor(currentBlock) = ceil(maxSample);
     end
-    fprintf('Blok %d, Wspólczynnik skalowania: %d,\nPocz¹tkowe dane:   ',currentBlock,scalingFactor(currentBlock));
-    disp(readBlock(currentBlock,:));
+    %fprintf('Blok %d, Wspólczynnik skalowania: %d,\nPocz¹tkowe dane:   ',currentBlock,scalingFactor(currentBlock));
+    %disp(readBlock(currentBlock,:));
     %fprintf('Blok %d, Wspólczynnik skalowania: %d\n',currentBlock,scalingFactor(currentBlock));
     %scaledBlockData(currentBlock,1:blockSize) = (testData(1+(currentBlock-1)*blockSize:(currentBlock*blockSize)).*((2^Qq)-1))./scalingFactor(currentBlock);
     %_ mno¿enie próbek zespolonych przez wspó³czynnik skalowania (w³aœciwa czêœæ procesu skalowania)
-    fprintf('\nPrzeskalowane dane:');
+    %fprintf('\nPrzeskalowane dane:');
     scalingFraction = (2^(Qq-1)-1)/scalingFactor(currentBlock);
     scaledBlockData(currentBlock,:) = readBlock(currentBlock,:)*scalingFraction;
-    disp(scaledBlockData(currentBlock,:));
+    %disp(scaledBlockData(currentBlock,:));
 end
 
 %% kwantyzacja
@@ -132,18 +156,26 @@ for currentBlock = 1:NUM_OF_BLOCKS
 end
 
 %% porównanie danych Ÿród³owych i odtworzonych
-disp('-------')
-disp('EVM')
-disp('-------')
+%disp('-------')
+%disp('EVM')
+%disp('-------')
 EVM = ones(1,NUM_OF_BLOCKS);
 for currentBlock = 1:NUM_OF_BLOCKS
     EVM(currentBlock) = sqrt( sum( abs(rescaledBlockData(currentBlock,:)-readBlock(currentBlock,:)).^2 )/sum( abs(readBlock(currentBlock,:)).^2 ) )*100;
 end
-disp(EVM)
-disp('Mean EVM')
-disp(mean(EVM))
-disp('Compression rate')
-disp(DATA_COMPRESSION_RATE)
+%disp(EVM)
+%disp('Mean EVM')
+%disp(mean(EVM))
+%disp('Compression rate')
+%disp(DATA_COMPRESSION_RATE)
+                  fprintf(outFile,'%d,%d,%d,%f,%f\n',blockSize,Qs,Qq,mean(EVM),DATA_COMPRESSION_RATE);
+              end
+           end
+        end
+    end
+end
+fprintf('\n')
+fclose(outFile);
 % disp('-------')
 % disp('koniec')
 % disp('-------')
