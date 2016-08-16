@@ -6,7 +6,7 @@ clear all
 format long g % eng
 %_ parametry sta³e
 TEST_DATA_BITWIDTH = 16; % szerokoœæ bitowa próbek testowych (sign int)
-TEST_VECTOR_LENGTH = 8192; % iloœæ próbek w wektorze danych testowych
+TEST_VECTOR_LENGTH = 307200; % iloœæ próbek w wektorze danych testowych
 %_ parametry testowane 
 blockSize = 1024; % rozmiar bloków danych do skalowania
 Qs = 16; % szerokoœæ bitowa wspó³czynika skalowania
@@ -20,17 +20,23 @@ OUT_DATA_SIZE = NUM_OF_BLOCKS*Qs + TEST_VECTOR_LENGTH*Qq;
 DATA_COMPRESSION_RATE = IN_DATA_SIZE/OUT_DATA_SIZE;
 
 %% inicjalizacja wektora testowego
+%& wektor LTE E_TM_3_1 20MHz
+inFile = fopen('LteTestVector.txt','r');
+samplesFromFile = fscanf(inFile,'%f	%f',[2,TEST_VECTOR_LENGTH]);
+readDataVector = samplesFromFile';
+testVector = readDataVector(:,1) + 1i*readDataVector(:,2);
+%randomDataVector = fscanf(inFile,'%f %f',[307200,2]);
 %& wektory zespolone
-randomDataVector = randn(1,TEST_VECTOR_LENGTH) + 1i.*randn(1,TEST_VECTOR_LENGTH); % wektor losowych danych
+%randomDataVector = randn(1,TEST_VECTOR_LENGTH) + 1i.*randn(1,TEST_VECTOR_LENGTH); % wektor losowych danych
             % zespolonych o rozk³adzie normalnym
 %randomDataVector = (1 + 1i).*randn(1,TEST_VECTOR_LENGTH); % wektor losowych danych zespolonych o rozk³adzie
             % normalnym, o równych sobie wspó³czynnikach rzeczywistych i urojonych
 %randomDataVector = (1 + 1i).*linspace(1,TEST_VECTOR_LENGTH,TEST_VECTOR_LENGTH);
 %_ skalowanie wektora testowego do wartoœci nie wiêkszych ni¿ 2^TEST_DATA_BITWIDTH
-maxRandomSample = max(max(abs(real(randomDataVector)),abs(imag(randomDataVector))));
-scaledRandomData = randomDataVector.*((2^(TEST_DATA_BITWIDTH-1))/maxRandomSample);
+%maxRandomSample = max(max(abs(real(randomDataVector)),abs(imag(randomDataVector))));
+%scaledRandomData = randomDataVector.*((2^(TEST_DATA_BITWIDTH-1))/maxRandomSample);
 %_ konwersja wspó³czynników na integer
-testVector = int16(scaledRandomData);
+%testVector = int16(scaledRandomData);
 %& wektory rzeczywiste
 %testVector = randi([-(2^(TEST_DATA_BITWIDTH-1)) (2^(TEST_DATA_BITWIDTH-1))],1,TEST_VECTOR_LENGTH); % wektor
             % losowych integerów nie wiekszych ni¿ 2^TEST_DATA_BITWIDTH
@@ -39,14 +45,16 @@ testVector = int16(scaledRandomData);
 %testVector = linspace(1,(2^TEST_DATA_BITWIDTH-1),TEST_VECTOR_LENGTH); % wektor wartoœci stale rosnacych
 
 %% Pêtle automatyzuj¹ce symulacjê
-minQs = 4;
+minQs = 8;
 maxQs = TEST_DATA_BITWIDTH;
-minQq = 4;
+minQq = 8;
 maxQq = TEST_DATA_BITWIDTH;
-minBlockSize = 1;
+minBlockSize = 64;
 maxBlockSize = TEST_VECTOR_LENGTH;
 outFile = fopen('simResults.ods','w');
 fprintf(outFile,'Block size, Scaling factor bitwidth, Quantisation bitwidth, Mean EVM, Compression rate\n');
+countDots = 0;
+tic
 for blockSize = minBlockSize:maxBlockSize
     if mod(TEST_VECTOR_LENGTH,blockSize) == 0
         for Qs = minQs:maxQs
@@ -56,6 +64,12 @@ for blockSize = minBlockSize:maxBlockSize
               else
                   %_ Zmienne pomocnocze zale¿ne od testowanych parametrów
                   fprintf('*')
+                  if countDots < 100
+                    countDots = countDots + 1;
+                  else
+                     countDots = 0;
+                     fprintf('\n')
+                  end
                   NUM_OF_BLOCKS = TEST_VECTOR_LENGTH/blockSize;
                   %_ Obliczenie wspó³czynnika kompresji
                   IN_DATA_SIZE = TEST_VECTOR_LENGTH*TEST_DATA_BITWIDTH;
@@ -176,6 +190,7 @@ end
 end
 fprintf('\n')
 fclose(outFile);
+overallTime = toc
 % disp('-------')
 % disp('koniec')
 % disp('-------')
